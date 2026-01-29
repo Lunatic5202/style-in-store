@@ -8,7 +8,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { MapPin, Navigation, Loader2, Check, RefreshCw } from "lucide-react";
+import { MapPin, Navigation, Loader2, Check, RefreshCw, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { getCurrentLocation, type LocationData } from "@/lib/locationService";
 import "leaflet/dist/leaflet.css";
 
@@ -30,6 +31,8 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
   const [mapInitError, setMapInitError] = useState<string | null>(null);
   const [mapInitKey, setMapInitKey] = useState(0); // bump to force re-init
   const [mode, setMode] = useState<"current" | "custom">("current");
+  const [addressQuery, setAddressQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -91,6 +94,37 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
       setLocationName("Selected location");
     } finally {
       setIsReverseGeocoding(false);
+    }
+  };
+
+  const handleAddressSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addressQuery.trim()) return;
+
+    setIsSearching(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressQuery)}&limit=1`
+      );
+      const results = await response.json();
+      if (results && results.length > 0) {
+        const result = results[0];
+        const lat = parseFloat(result.lat);
+        const lng = parseFloat(result.lon);
+        
+        setSelectedLocation({ lat, lng });
+        setLocationName(result.display_name.split(",")[0] || addressQuery);
+        setMode("custom");
+
+        // Pan map to result
+        if (mapRef.current) {
+          mapRef.current.setView([lat, lng], 16, { animate: true });
+        }
+      }
+    } catch (err) {
+      console.error("Address search failed:", err);
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -259,6 +293,23 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
               Choose on Map
             </Button>
           </div>
+
+          {/* Address Search */}
+          <form onSubmit={handleAddressSearch} className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search for an address..."
+                className="pl-9"
+                value={addressQuery}
+                onChange={(e) => setAddressQuery(e.target.value)}
+              />
+            </div>
+            <Button type="submit" variant="secondary" disabled={isSearching || !addressQuery.trim()}>
+              {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
+            </Button>
+          </form>
 
           {/* Map */}
           <div className="h-64 rounded-lg overflow-hidden border border-border bg-muted">

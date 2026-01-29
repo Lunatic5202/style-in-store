@@ -151,11 +151,16 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
     mapRef.current = map;
 
     // Ensure correct sizing inside Dialog after it mounts.
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 0);
+    // Radix Dialog animates in; Leaflet can measure 0x0 initially.
+    // A couple of delayed invalidations makes rendering reliable.
+    const t1 = window.setTimeout(() => map.invalidateSize(), 0);
+    const t2 = window.setTimeout(() => map.invalidateSize(), 150);
+    const t3 = window.setTimeout(() => map.invalidateSize(), 500);
 
     return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
       map.remove();
       mapRef.current = null;
       markerRef.current = null;
@@ -218,7 +223,7 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
           </div>
 
           {/* Map */}
-          <div className="h-64 rounded-lg overflow-hidden border border-border">
+          <div className="h-64 rounded-lg overflow-hidden border border-border bg-muted">
             <div ref={mapContainerRef} className="h-full w-full" />
           </div>
 

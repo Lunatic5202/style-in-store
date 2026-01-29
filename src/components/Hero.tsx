@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, MapPin, Clock, Store } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Hero = () => {
   return (
@@ -24,9 +25,11 @@ const Hero = () => {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8 py-6">
-                Shop Now
-                <ArrowRight className="ml-2 w-5 h-5" />
+              <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8 py-6" asChild>
+                <Link to="/browse">
+                  Shop Now
+                  <ArrowRight className="ml-2 w-5 h-5" />
+                </Link>
               </Button>
               <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-2">
                 Partner with us
@@ -52,10 +55,11 @@ const Hero = () => {
           </div>
 
           <div className="relative">
-            <div className="relative z-10">
+              <div className="relative z-10">
               <div className="bg-card border-2 border-border rounded-2xl p-6 shadow-lg">
                 <div className="flex items-center gap-3 mb-6">
                   <MapPin className="w-5 h-5 text-secondary" />
+                  <span className="text-sm text-muted-foreground">Stores near you</span>
                   <span className="text-sm text-muted-foreground">Stores near Koramangala, Bangalore</span>
                 </div>
                 

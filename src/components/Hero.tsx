@@ -1,8 +1,33 @@
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, MapPin, Clock, Store } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const Hero = () => {
+  const [location, setLocation] = useState<string>("your area");
+
+  useEffect(() => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`
+            );
+            const data = await response.json();
+            const area = data.address?.suburb || data.address?.neighbourhood || data.address?.city || "your area";
+            setLocation(area);
+          } catch {
+            setLocation("your area");
+          }
+        },
+        () => {
+          setLocation("your area");
+        }
+      );
+    }
+  }, []);
+
   return (
     <section className="pt-32 pb-20 px-6 overflow-hidden">
       <div className="container mx-auto">
@@ -59,8 +84,7 @@ const Hero = () => {
               <div className="bg-card border-2 border-border rounded-2xl p-6 shadow-lg">
                 <div className="flex items-center gap-3 mb-6">
                   <MapPin className="w-5 h-5 text-secondary" />
-                  <span className="text-sm text-muted-foreground">Stores near you</span>
-                  <span className="text-sm text-muted-foreground">Stores near Koramangala, Bangalore</span>
+                  <span className="text-sm text-muted-foreground">Stores near {location}</span>
                 </div>
                 
                 <div className="space-y-4">

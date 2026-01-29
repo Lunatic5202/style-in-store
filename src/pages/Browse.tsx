@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
   MapPin, Search, Filter, Clock, Store, Heart, 
-  ChevronDown, X, Zap, ShoppingBag, ArrowLeft 
+  ChevronDown, X, Zap, ShoppingBag, ArrowLeft, Loader2
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { getCurrentLocation, fetchNearbyStores, type NearbyStore, type LocationData } from "@/lib/locationService";
 
 type Product = {
   id: number;
@@ -15,128 +16,31 @@ type Product = {
   originalPrice?: number;
   image: string;
   store: string;
-  distance: string;
-  deliveryTime: string;
+  storeId: number;
   sizes: string[];
   category: string;
   inStock: boolean;
 };
 
-const mockProducts: Product[] = [
-  {
-    id: 1,
-    name: "Slim Fit Oxford Shirt",
-    brand: "Zara",
-    price: 2990,
-    originalPrice: 3990,
-    image: "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=400&h=500&fit=crop",
-    store: "Zara",
-    distance: "0.8 km",
-    deliveryTime: "12 min",
-    sizes: ["S", "M", "L", "XL"],
-    category: "Shirts",
-    inStock: true,
-  },
-  {
-    id: 2,
-    name: "High Rise Skinny Jeans",
-    brand: "H&M",
-    price: 1999,
-    image: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=400&h=500&fit=crop",
-    store: "H&M",
-    distance: "1.2 km",
-    deliveryTime: "15 min",
-    sizes: ["28", "30", "32", "34"],
-    category: "Jeans",
-    inStock: true,
-  },
-  {
-    id: 3,
-    name: "Oversized Blazer",
-    brand: "Mango",
-    price: 5990,
-    originalPrice: 7990,
-    image: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=400&h=500&fit=crop",
-    store: "Mango",
-    distance: "1.5 km",
-    deliveryTime: "18 min",
-    sizes: ["S", "M", "L"],
-    category: "Blazers",
-    inStock: true,
-  },
-  {
-    id: 4,
-    name: "Cotton Crew Neck Tee",
-    brand: "Uniqlo",
-    price: 999,
-    image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=500&fit=crop",
-    store: "Uniqlo",
-    distance: "0.5 km",
-    deliveryTime: "8 min",
-    sizes: ["XS", "S", "M", "L", "XL"],
-    category: "T-Shirts",
-    inStock: true,
-  },
-  {
-    id: 5,
-    name: "Pleated Midi Skirt",
-    brand: "Zara",
-    price: 3490,
-    image: "https://images.unsplash.com/photo-1583496661160-fb5886a0uj09?w=400&h=500&fit=crop",
-    store: "Zara",
-    distance: "0.8 km",
-    deliveryTime: "12 min",
-    sizes: ["XS", "S", "M", "L"],
-    category: "Skirts",
-    inStock: true,
-  },
-  {
-    id: 6,
-    name: "Leather Biker Jacket",
-    brand: "AllSaints",
-    price: 12990,
-    originalPrice: 18990,
-    image: "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400&h=500&fit=crop",
-    store: "AllSaints",
-    distance: "2.1 km",
-    deliveryTime: "22 min",
-    sizes: ["S", "M", "L"],
-    category: "Jackets",
-    inStock: true,
-  },
-  {
-    id: 7,
-    name: "Linen Summer Dress",
-    brand: "Mango",
-    price: 4490,
-    image: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=500&fit=crop",
-    store: "Mango",
-    distance: "1.5 km",
-    deliveryTime: "18 min",
-    sizes: ["XS", "S", "M", "L"],
-    category: "Dresses",
-    inStock: true,
-  },
-  {
-    id: 8,
-    name: "Relaxed Fit Chinos",
-    brand: "H&M",
-    price: 1799,
-    image: "https://images.unsplash.com/photo-1473966968600-fa801b869a1a?w=400&h=500&fit=crop",
-    store: "H&M",
-    distance: "1.2 km",
-    deliveryTime: "15 min",
-    sizes: ["30", "32", "34", "36"],
-    category: "Trousers",
-    inStock: true,
-  },
+// Product templates that will be associated with real stores
+const productTemplates = [
+  { name: "Slim Fit Oxford Shirt", price: 2990, originalPrice: 3990, image: "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=400&h=500&fit=crop", sizes: ["S", "M", "L", "XL"], category: "Shirts" },
+  { name: "High Rise Skinny Jeans", price: 1999, image: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=400&h=500&fit=crop", sizes: ["28", "30", "32", "34"], category: "Jeans" },
+  { name: "Oversized Blazer", price: 5990, originalPrice: 7990, image: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=400&h=500&fit=crop", sizes: ["S", "M", "L"], category: "Blazers" },
+  { name: "Cotton Crew Neck Tee", price: 999, image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=500&fit=crop", sizes: ["XS", "S", "M", "L", "XL"], category: "T-Shirts" },
+  { name: "Pleated Midi Skirt", price: 3490, image: "https://images.unsplash.com/photo-1583496661160-fb5886a0uj09?w=400&h=500&fit=crop", sizes: ["XS", "S", "M", "L"], category: "Skirts" },
+  { name: "Leather Biker Jacket", price: 12990, originalPrice: 18990, image: "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400&h=500&fit=crop", sizes: ["S", "M", "L"], category: "Jackets" },
+  { name: "Linen Summer Dress", price: 4490, image: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=500&fit=crop", sizes: ["XS", "S", "M", "L"], category: "Dresses" },
+  { name: "Relaxed Fit Chinos", price: 1799, image: "https://images.unsplash.com/photo-1473966968600-fa801b869a1a?w=400&h=500&fit=crop", sizes: ["30", "32", "34", "36"], category: "Trousers" },
 ];
 
 const categories = ["All", "Shirts", "T-Shirts", "Jeans", "Trousers", "Dresses", "Skirts", "Blazers", "Jackets"];
-const stores = ["All Stores", "Zara", "H&M", "Mango", "Uniqlo", "AllSaints"];
 
 const Browse = () => {
-  const [location, setLocation] = useState<string>("Detecting location...");
+  const [locationData, setLocationData] = useState<LocationData | null>(null);
+  const [nearbyStores, setNearbyStores] = useState<NearbyStore[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedStore, setSelectedStore] = useState("All Stores");
@@ -144,31 +48,56 @@ const Browse = () => {
   const [favorites, setFavorites] = useState<number[]>([]);
 
   useEffect(() => {
-    // Simulate location detection
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const response = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`
-            );
-            const data = await response.json();
-            const area = data.address?.suburb || data.address?.neighbourhood || data.address?.city || "Your Location";
-            setLocation(area);
-          } catch {
-            setLocation("Your Location");
+    async function loadData() {
+      try {
+        const location = await getCurrentLocation();
+        setLocationData(location);
+        
+        const stores = await fetchNearbyStores(location.latitude, location.longitude);
+        setNearbyStores(stores);
+        
+        // Generate products from real stores
+        const generatedProducts: Product[] = [];
+        stores.forEach((store, storeIndex) => {
+          // Each store gets 2-4 random products
+          const numProducts = 2 + (store.id % 3);
+          for (let i = 0; i < numProducts; i++) {
+            const templateIndex = (storeIndex + i) % productTemplates.length;
+            const template = productTemplates[templateIndex];
+            generatedProducts.push({
+              id: store.id * 100 + i,
+              name: template.name,
+              brand: store.name,
+              price: template.price,
+              originalPrice: template.originalPrice,
+              image: template.image,
+              store: store.name,
+              storeId: store.id,
+              sizes: template.sizes,
+              category: template.category,
+              inStock: true,
+            });
           }
-        },
-        () => {
-          setLocation("Enable location access");
-        }
-      );
-    } else {
-      setLocation("Location not available");
+        });
+        
+        setProducts(generatedProducts);
+      } catch (error) {
+        console.error("Error loading data:", error);
+      } finally {
+        setLoading(false);
+      }
     }
+
+    loadData();
   }, []);
 
-  const filteredProducts = mockProducts.filter((product) => {
+  const storeNames = ["All Stores", ...new Set(nearbyStores.map(s => s.name))];
+  
+  const getStoreInfo = (storeId: number) => {
+    return nearbyStores.find(s => s.id === storeId);
+  };
+
+  const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          product.brand.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === "All" || product.category === selectedCategory;
@@ -181,6 +110,17 @@ const Browse = () => {
       prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]
     );
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-secondary mx-auto mb-4" />
+          <p className="text-lg text-muted-foreground">Finding stores near you...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -225,9 +165,12 @@ const Browse = () => {
             <MapPin className="w-4 h-4 text-secondary" />
             <span className="text-muted-foreground">Delivering to</span>
             <button className="font-medium text-foreground flex items-center gap-1 hover:text-secondary transition-colors">
-              {location}
+              {locationData?.area || "Your Location"}
               <ChevronDown className="w-4 h-4" />
             </button>
+            {nearbyStores.length > 0 && (
+              <span className="text-muted-foreground ml-2">• {nearbyStores.length} stores nearby</span>
+            )}
           </div>
         </div>
       </header>
@@ -272,7 +215,7 @@ const Browse = () => {
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
-              {stores.map((store) => (
+              {storeNames.map((store) => (
                 <button
                   key={store}
                   onClick={() => setSelectedStore(store)}
@@ -327,16 +270,21 @@ const Browse = () => {
                 )}
 
                 {/* Quick Delivery Badge */}
-                <div className="absolute bottom-3 left-3 right-3 bg-background/90 backdrop-blur-sm rounded-lg p-2 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-secondary" />
-                    <span className="text-xs font-medium text-foreground">{product.deliveryTime}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Store className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">{product.distance}</span>
-                  </div>
-                </div>
+                {(() => {
+                  const storeInfo = getStoreInfo(product.storeId);
+                  return (
+                    <div className="absolute bottom-3 left-3 right-3 bg-background/90 backdrop-blur-sm rounded-lg p-2 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-secondary" />
+                        <span className="text-xs font-medium text-foreground">{storeInfo?.deliveryTime || "15 min"}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Store className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">{storeInfo?.distance || "nearby"}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>

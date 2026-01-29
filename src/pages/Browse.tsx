@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getCurrentLocation, fetchNearbyStores, type NearbyStore, type LocationData } from "@/lib/locationService";
+import { LocationPicker } from "@/components/LocationPicker";
 
 type Product = {
   id: number;
@@ -46,50 +47,66 @@ const Browse = () => {
   const [selectedStore, setSelectedStore] = useState("All Stores");
   const [showFilters, setShowFilters] = useState(false);
   const [favorites, setFavorites] = useState<number[]>([]);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+
+  const loadStoresForLocation = async (location: LocationData) => {
+    setLoading(true);
+    try {
+      const stores = await fetchNearbyStores(location.latitude, location.longitude);
+      setNearbyStores(stores);
+      
+      // Generate products from real stores
+      const generatedProducts: Product[] = [];
+      stores.forEach((store, storeIndex) => {
+        // Each store gets 2-4 random products
+        const numProducts = 2 + (store.id % 3);
+        for (let i = 0; i < numProducts; i++) {
+          const templateIndex = (storeIndex + i) % productTemplates.length;
+          const template = productTemplates[templateIndex];
+          generatedProducts.push({
+            id: store.id * 100 + i,
+            name: template.name,
+            brand: store.name,
+            price: template.price,
+            originalPrice: template.originalPrice,
+            image: template.image,
+            store: store.name,
+            storeId: store.id,
+            sizes: template.sizes,
+            category: template.category,
+            inStock: true,
+          });
+        }
+      });
+      
+      setProducts(generatedProducts);
+    } catch (error) {
+      console.error("Error loading stores:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     async function loadData() {
       try {
         const location = await getCurrentLocation();
         setLocationData(location);
-        
-        const stores = await fetchNearbyStores(location.latitude, location.longitude);
-        setNearbyStores(stores);
-        
-        // Generate products from real stores
-        const generatedProducts: Product[] = [];
-        stores.forEach((store, storeIndex) => {
-          // Each store gets 2-4 random products
-          const numProducts = 2 + (store.id % 3);
-          for (let i = 0; i < numProducts; i++) {
-            const templateIndex = (storeIndex + i) % productTemplates.length;
-            const template = productTemplates[templateIndex];
-            generatedProducts.push({
-              id: store.id * 100 + i,
-              name: template.name,
-              brand: store.name,
-              price: template.price,
-              originalPrice: template.originalPrice,
-              image: template.image,
-              store: store.name,
-              storeId: store.id,
-              sizes: template.sizes,
-              category: template.category,
-              inStock: true,
-            });
-          }
-        });
-        
-        setProducts(generatedProducts);
+        await loadStoresForLocation(location);
       } catch (error) {
         console.error("Error loading data:", error);
-      } finally {
         setLoading(false);
       }
     }
 
     loadData();
   }, []);
+
+  const handleLocationSelect = async (location: LocationData) => {
+    setLocationData(location);
+    setSelectedStore("All Stores");
+    await loadStoresForLocation(location);
+  };
 
   const storeNames = ["All Stores", ...new Set(nearbyStores.map(s => s.name))];
   
@@ -164,7 +181,10 @@ const Browse = () => {
           <div className="flex items-center gap-2 mt-3 text-sm">
             <MapPin className="w-4 h-4 text-secondary" />
             <span className="text-muted-foreground">Delivering to</span>
-            <button className="font-medium text-foreground flex items-center gap-1 hover:text-secondary transition-colors">
+            <button 
+              onClick={() => setShowLocationPicker(true)}
+              className="font-medium text-foreground flex items-center gap-1 hover:text-secondary transition-colors"
+            >
               {locationData?.area || "Your Location"}
               <ChevronDown className="w-4 h-4" />
             </button>
@@ -325,6 +345,14 @@ const Browse = () => {
           </div>
         )}
       </main>
+
+      {/* Location Picker Modal */}
+      <LocationPicker
+        isOpen={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onLocationSelect={handleLocationSelect}
+        currentLocation={locationData}
+      />
     </div>
   );
 };

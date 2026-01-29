@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
-import { Icon } from "leaflet";
+import { useEffect, useMemo, useRef, useState } from "react";
+import L from "leaflet";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,14 +12,8 @@ import { MapPin, Navigation, Loader2, Check } from "lucide-react";
 import { getCurrentLocation, type LocationData } from "@/lib/locationService";
 import "leaflet/dist/leaflet.css";
 
-// Fix for default marker icon
-const markerIcon = new Icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
+// NOTE: We intentionally use Leaflet directly (not react-leaflet) to avoid
+// React context consumer issues inside Radix Dialog portals in some Vite builds.
 
 type LocationPickerProps = {
   isOpen: boolean;
@@ -29,62 +22,27 @@ type LocationPickerProps = {
   currentLocation: LocationData | null;
 };
 
-function MapClickHandler({ onLocationChange }: { onLocationChange: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click: (e) => {
-      onLocationChange(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-function MapCenterUpdater({ center }: { center: [number, number] }) {
-  const map = useMap();
-  useEffect(() => {
-    map.setView(center, map.getZoom());
-  }, [center, map]);
-  return null;
-}
-
-function MapContent({ 
-  center, 
-  selectedLocation, 
-  onLocationChange 
-}: { 
-  center: [number, number]; 
-  selectedLocation: { lat: number; lng: number } | null;
-  onLocationChange: (lat: number, lng: number) => void;
-}) {
-  return (
-    <MapContainer
-      center={center}
-      zoom={14}
-      style={{ height: "100%", width: "100%" }}
-      scrollWheelZoom={true}
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <MapClickHandler onLocationChange={onLocationChange} />
-      <MapCenterUpdater center={center} />
-      {selectedLocation && (
-        <Marker 
-          position={[selectedLocation.lat, selectedLocation.lng]} 
-          icon={markerIcon}
-        />
-      )}
-    </MapContainer>
-  );
-}
-
 export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocation }: LocationPickerProps) {
   const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationName, setLocationName] = useState<string>("");
   const [isLoadingCurrentLocation, setIsLoadingCurrentLocation] = useState(false);
   const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
   const [mode, setMode] = useState<"current" | "custom">("current");
-  const [mapReady, setMapReady] = useState(false);
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+
+  const markerIcon = useMemo(
+    () =>
+      L.icon({
+        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+      }),
+    [],
+  );
   
   const defaultCenter: [number, number] = currentLocation 
     ? [currentLocation.latitude, currentLocation.longitude] 
@@ -94,11 +52,6 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
     if (isOpen && currentLocation) {
       setSelectedLocation({ lat: currentLocation.latitude, lng: currentLocation.longitude });
       setLocationName(currentLocation.area);
-      // Delay map render to ensure dialog is fully mounted
-      const timer = setTimeout(() => setMapReady(true), 100);
-      return () => clearTimeout(timer);
-    } else if (!isOpen) {
-      setMapReady(false);
     }
   }, [isOpen, currentLocation]);
 
@@ -168,6 +121,66 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
     ? [selectedLocation.lat, selectedLocation.lng] 
     : defaultCenter;
 
+  // Create / destroy Leaflet map when dialog opens/closes.
+  useEffect(() => {
+    if (!isOpen) {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+      markerRef.current = null;
+      return;
+    }
+
+    if (!mapContainerRef.current || mapRef.current) return;
+
+    const map = L.map(mapContainerRef.current, {
+      zoomControl: true,
+      scrollWheelZoom: true,
+    }).setView(mapCenter, 14);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+
+    map.on("click", (e: L.LeafletMouseEvent) => {
+      void handleMapClick(e.latlng.lat, e.latlng.lng);
+    });
+
+    mapRef.current = map;
+
+    // Ensure correct sizing inside Dialog after it mounts.
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 0);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  // Keep map centered and marker updated.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    map.setView(mapCenter, map.getZoom(), { animate: false });
+
+    if (selectedLocation) {
+      if (!markerRef.current) {
+        markerRef.current = L.marker([selectedLocation.lat, selectedLocation.lng], {
+          icon: markerIcon,
+        }).addTo(map);
+      } else {
+        markerRef.current.setLatLng([selectedLocation.lat, selectedLocation.lng]);
+      }
+    }
+  }, [mapCenter, selectedLocation, markerIcon]);
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-hidden">
@@ -206,17 +219,7 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
 
           {/* Map */}
           <div className="h-64 rounded-lg overflow-hidden border border-border">
-            {mapReady ? (
-              <MapContent
-                center={mapCenter}
-                selectedLocation={selectedLocation}
-                onLocationChange={handleMapClick}
-              />
-            ) : (
-              <div className="h-full w-full flex items-center justify-center bg-muted">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            )}
+            <div ref={mapContainerRef} className="h-full w-full" />
           </div>
 
           {/* Selected Location Display */}

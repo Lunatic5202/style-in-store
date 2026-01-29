@@ -27,6 +27,7 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
   const [locationName, setLocationName] = useState<string>("");
   const [isLoadingCurrentLocation, setIsLoadingCurrentLocation] = useState(false);
   const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
+  const [mapInitError, setMapInitError] = useState<string | null>(null);
   const [mode, setMode] = useState<"current" | "custom">("current");
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -129,39 +130,75 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
         mapRef.current = null;
       }
       markerRef.current = null;
+      setMapInitError(null);
       return;
     }
 
     if (!mapContainerRef.current || mapRef.current) return;
 
-    const map = L.map(mapContainerRef.current, {
-      zoomControl: true,
-      scrollWheelZoom: true,
-    }).setView(mapCenter, 14);
+    // After refresh + first open, Radix can briefly report a 0x0 container during
+    // its mount/animation. Leaflet won't fetch tiles if initialized at 0x0.
+    // We wait until the container has a real size before creating the map.
+    let cancelled = false;
+    let rafId = 0;
+    let attempts = 0;
+    let map: L.Map | null = null;
+    const timeouts: number[] = [];
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
+    const tryInit = () => {
+      if (cancelled) return;
+      const el = mapContainerRef.current;
+      if (!el || mapRef.current) return;
 
-    map.on("click", (e: L.LeafletMouseEvent) => {
-      void handleMapClick(e.latlng.lat, e.latlng.lng);
-    });
+      const rect = el.getBoundingClientRect();
+      const hasSize = rect.width > 0 && rect.height > 0;
 
-    mapRef.current = map;
+      // Try for ~2 seconds max (120 frames at 60fps).
+      if (!hasSize) {
+        attempts += 1;
+        if (attempts > 120) {
+          setMapInitError("Map container not ready. Please close and reopen.");
+          return;
+        }
+        rafId = window.requestAnimationFrame(tryInit);
+        return;
+      }
 
-    // Ensure correct sizing inside Dialog after it mounts.
-    // Radix Dialog animates in; Leaflet can measure 0x0 initially.
-    // A couple of delayed invalidations makes rendering reliable.
-    const t1 = window.setTimeout(() => map.invalidateSize(), 0);
-    const t2 = window.setTimeout(() => map.invalidateSize(), 150);
-    const t3 = window.setTimeout(() => map.invalidateSize(), 500);
+      try {
+        setMapInitError(null);
+        map = L.map(el, {
+          zoomControl: true,
+          scrollWheelZoom: true,
+        }).setView(mapCenter, 14);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        }).addTo(map);
+
+        map.on("click", (e: L.LeafletMouseEvent) => {
+          void handleMapClick(e.latlng.lat, e.latlng.lng);
+        });
+
+        mapRef.current = map;
+
+        // Ensure correct sizing inside Dialog after it mounts.
+        timeouts.push(window.setTimeout(() => map?.invalidateSize(), 0));
+        timeouts.push(window.setTimeout(() => map?.invalidateSize(), 150));
+        timeouts.push(window.setTimeout(() => map?.invalidateSize(), 500));
+      } catch (err) {
+        console.error("Leaflet map init failed:", err);
+        setMapInitError("Failed to initialize the map. Please refresh.");
+      }
+    };
+
+    rafId = window.requestAnimationFrame(tryInit);
 
     return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-      window.clearTimeout(t3);
-      map.remove();
+      cancelled = true;
+      window.cancelAnimationFrame(rafId);
+      timeouts.forEach((t) => window.clearTimeout(t));
+      map?.remove();
       mapRef.current = null;
       markerRef.current = null;
     };
@@ -224,7 +261,14 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
 
           {/* Map */}
           <div className="h-64 rounded-lg overflow-hidden border border-border bg-muted">
-            <div ref={mapContainerRef} className="h-full w-full" />
+            <div className="relative h-full w-full">
+              <div ref={mapContainerRef} className="h-full w-full" />
+              {mapInitError && (
+                <div className="absolute inset-0 flex items-center justify-center p-4 text-center">
+                  <p className="text-sm text-muted-foreground">{mapInitError}</p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Selected Location Display */}

@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
-import { Icon, LatLng } from "leaflet";
+import { Icon } from "leaflet";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -46,12 +46,45 @@ function MapCenterUpdater({ center }: { center: [number, number] }) {
   return null;
 }
 
+function MapContent({ 
+  center, 
+  selectedLocation, 
+  onLocationChange 
+}: { 
+  center: [number, number]; 
+  selectedLocation: { lat: number; lng: number } | null;
+  onLocationChange: (lat: number, lng: number) => void;
+}) {
+  return (
+    <MapContainer
+      center={center}
+      zoom={14}
+      style={{ height: "100%", width: "100%" }}
+      scrollWheelZoom={true}
+    >
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      <MapClickHandler onLocationChange={onLocationChange} />
+      <MapCenterUpdater center={center} />
+      {selectedLocation && (
+        <Marker 
+          position={[selectedLocation.lat, selectedLocation.lng]} 
+          icon={markerIcon}
+        />
+      )}
+    </MapContainer>
+  );
+}
+
 export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocation }: LocationPickerProps) {
   const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationName, setLocationName] = useState<string>("");
   const [isLoadingCurrentLocation, setIsLoadingCurrentLocation] = useState(false);
   const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
   const [mode, setMode] = useState<"current" | "custom">("current");
+  const [mapReady, setMapReady] = useState(false);
   
   const defaultCenter: [number, number] = currentLocation 
     ? [currentLocation.latitude, currentLocation.longitude] 
@@ -61,6 +94,11 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
     if (isOpen && currentLocation) {
       setSelectedLocation({ lat: currentLocation.latitude, lng: currentLocation.longitude });
       setLocationName(currentLocation.area);
+      // Delay map render to ensure dialog is fully mounted
+      const timer = setTimeout(() => setMapReady(true), 100);
+      return () => clearTimeout(timer);
+    } else if (!isOpen) {
+      setMapReady(false);
     }
   }, [isOpen, currentLocation]);
 
@@ -107,7 +145,6 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
     let area = locationName;
     let city = "";
     
-    // Get city name if not already available
     try {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${selectedLocation.lat}&lon=${selectedLocation.lng}`
@@ -169,25 +206,17 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
 
           {/* Map */}
           <div className="h-64 rounded-lg overflow-hidden border border-border">
-            <MapContainer
-              center={mapCenter}
-              zoom={14}
-              style={{ height: "100%", width: "100%" }}
-              scrollWheelZoom={true}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            {mapReady ? (
+              <MapContent
+                center={mapCenter}
+                selectedLocation={selectedLocation}
+                onLocationChange={handleMapClick}
               />
-              <MapClickHandler onLocationChange={handleMapClick} />
-              <MapCenterUpdater center={mapCenter} />
-              {selectedLocation && (
-                <Marker 
-                  position={[selectedLocation.lat, selectedLocation.lng]} 
-                  icon={markerIcon}
-                />
-              )}
-            </MapContainer>
+            ) : (
+              <div className="h-full w-full flex items-center justify-center bg-muted">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
           </div>
 
           {/* Selected Location Display */}

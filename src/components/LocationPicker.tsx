@@ -8,7 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { MapPin, Navigation, Loader2, Check } from "lucide-react";
+import { MapPin, Navigation, Loader2, Check, RefreshCw } from "lucide-react";
 import { getCurrentLocation, type LocationData } from "@/lib/locationService";
 import "leaflet/dist/leaflet.css";
 
@@ -28,6 +28,7 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
   const [isLoadingCurrentLocation, setIsLoadingCurrentLocation] = useState(false);
   const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
   const [mapInitError, setMapInitError] = useState<string | null>(null);
+  const [mapInitKey, setMapInitKey] = useState(0); // bump to force re-init
   const [mode, setMode] = useState<"current" | "custom">("current");
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -203,7 +204,7 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
       markerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, mapInitKey]);
 
   // Keep map centered and marker updated.
   useEffect(() => {
@@ -264,8 +265,26 @@ export function LocationPicker({ isOpen, onClose, onLocationSelect, currentLocat
             <div className="relative h-full w-full">
               <div ref={mapContainerRef} className="h-full w-full" />
               {mapInitError && (
-                <div className="absolute inset-0 flex items-center justify-center p-4 text-center">
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center bg-muted">
                   <p className="text-sm text-muted-foreground">{mapInitError}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => {
+                      // Remove stale map if any
+                      if (mapRef.current) {
+                        mapRef.current.remove();
+                        mapRef.current = null;
+                      }
+                      markerRef.current = null;
+                      setMapInitError(null);
+                      setMapInitKey((k) => k + 1);
+                    }}
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Reload Map
+                  </Button>
                 </div>
               )}
             </div>

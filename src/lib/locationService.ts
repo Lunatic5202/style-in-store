@@ -7,6 +7,7 @@ export type NearbyStore = {
   lat: number;
   lon: number;
   type: string;
+  website?: string;
 };
 
 export type LocationData = {
@@ -128,6 +129,7 @@ export async function fetchNearbyStores(latitude: number, longitude: number, rad
           lat: storeLat,
           lon: storeLon,
           type: el.tags.shop || "clothes",
+          website: el.tags.website || undefined,
         };
       })
       .sort((a: NearbyStore, b: NearbyStore) => a.distanceMeters - b.distanceMeters)

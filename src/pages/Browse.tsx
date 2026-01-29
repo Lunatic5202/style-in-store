@@ -3,11 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
   MapPin, Search, Filter, Clock, Store, Heart, 
-  ChevronDown, X, Zap, ShoppingBag, ArrowLeft, Loader2
+  ChevronDown, X, Zap, ShoppingBag, ArrowLeft, Loader2, Sparkles
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getCurrentLocation, fetchNearbyStores, type NearbyStore, type LocationData } from "@/lib/locationService";
 import { LocationPicker } from "@/components/LocationPicker";
+import { scrapeStoreProducts, type ScrapedProduct } from "@/lib/api/scrapeStore";
+import { useToast } from "@/hooks/use-toast";
 
 type Product = {
   id: number;
@@ -38,51 +40,118 @@ const productTemplates = [
 const categories = ["All", "Shirts", "T-Shirts", "Jeans", "Trousers", "Dresses", "Skirts", "Blazers", "Jackets"];
 
 const Browse = () => {
+  const { toast } = useToast();
   const [locationData, setLocationData] = useState<LocationData | null>(null);
   const [nearbyStores, setNearbyStores] = useState<NearbyStore[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scrapingStores, setScrapingStores] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedStore, setSelectedStore] = useState("All Stores");
   const [showFilters, setShowFilters] = useState(false);
   const [favorites, setFavorites] = useState<number[]>([]);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [hasScrapedData, setHasScrapedData] = useState(false);
+
+  const generateFallbackProducts = (stores: NearbyStore[]): Product[] => {
+    const generatedProducts: Product[] = [];
+    stores.forEach((store, storeIndex) => {
+      const numProducts = 2 + (store.id % 3);
+      for (let i = 0; i < numProducts; i++) {
+        const templateIndex = (storeIndex + i) % productTemplates.length;
+        const template = productTemplates[templateIndex];
+        generatedProducts.push({
+          id: store.id * 100 + i,
+          name: template.name,
+          brand: store.name,
+          price: template.price,
+          originalPrice: template.originalPrice,
+          image: template.image,
+          store: store.name,
+          storeId: store.id,
+          sizes: template.sizes,
+          category: template.category,
+          inStock: true,
+        });
+      }
+    });
+    return generatedProducts;
+  };
 
   const loadStoresForLocation = async (location: LocationData) => {
     setLoading(true);
+    setHasScrapedData(false);
     try {
       const stores = await fetchNearbyStores(location.latitude, location.longitude);
       setNearbyStores(stores);
       
-      // Generate products from real stores
-      const generatedProducts: Product[] = [];
-      stores.forEach((store, storeIndex) => {
-        // Each store gets 2-4 random products
-        const numProducts = 2 + (store.id % 3);
-        for (let i = 0; i < numProducts; i++) {
-          const templateIndex = (storeIndex + i) % productTemplates.length;
-          const template = productTemplates[templateIndex];
-          generatedProducts.push({
-            id: store.id * 100 + i,
-            name: template.name,
-            brand: store.name,
-            price: template.price,
-            originalPrice: template.originalPrice,
-            image: template.image,
-            store: store.name,
-            storeId: store.id,
-            sizes: template.sizes,
-            category: template.category,
-            inStock: true,
-          });
-        }
+      // Start with fallback products
+      const fallbackProducts = generateFallbackProducts(stores);
+      setProducts(fallbackProducts);
+      setLoading(false);
+
+      // Attempt to scrape real data from known retailers in background
+      const knownRetailers = stores.filter(s => {
+        const name = s.name.toLowerCase();
+        return ['westside', 'pantaloons', 'zudio', 'fabindia', 'w ', 'jockey', 'nike', 'adidas', 'reebok'].some(
+          retailer => name.includes(retailer)
+        );
       });
-      
-      setProducts(generatedProducts);
+
+      if (knownRetailers.length > 0) {
+        setScrapingStores(true);
+        toast({
+          title: "Fetching real products...",
+          description: `Checking ${knownRetailers.length} retailer website(s) for live inventory`,
+        });
+
+        const scrapeResult = await scrapeStoreProducts(
+          knownRetailers.map(s => ({ name: s.name, website: s.website }))
+        );
+
+        if (scrapeResult.success && scrapeResult.results) {
+          const scrapedProducts: Product[] = [];
+          let productId = 10000;
+
+          scrapeResult.results.forEach((result) => {
+            if (result.products && result.products.length > 0) {
+              const storeInfo = stores.find(s => s.name === result.storeName);
+              result.products.forEach((sp: ScrapedProduct) => {
+                scrapedProducts.push({
+                  id: productId++,
+                  name: sp.name,
+                  brand: result.storeName,
+                  price: sp.price || 1999,
+                  originalPrice: sp.originalPrice || undefined,
+                  image: sp.image || productTemplates[productId % productTemplates.length].image,
+                  store: result.storeName,
+                  storeId: storeInfo?.id || 0,
+                  sizes: sp.sizes.length > 0 ? sp.sizes : ['S', 'M', 'L'],
+                  category: sp.category,
+                  inStock: true,
+                });
+              });
+            }
+          });
+
+          if (scrapedProducts.length > 0) {
+            // Merge scraped products with fallback, prioritizing scraped
+            const remainingFallback = fallbackProducts.filter(
+              fp => !scrapedProducts.some(sp => sp.store === fp.store)
+            );
+            setProducts([...scrapedProducts, ...remainingFallback]);
+            setHasScrapedData(true);
+            toast({
+              title: "Live products loaded!",
+              description: `Found ${scrapedProducts.length} products from retailer websites`,
+            });
+          }
+        }
+        setScrapingStores(false);
+      }
     } catch (error) {
       console.error("Error loading stores:", error);
-    } finally {
       setLoading(false);
     }
   };
@@ -253,9 +322,23 @@ const Browse = () => {
         )}
 
         {/* Results Count */}
-        <p className="text-sm text-muted-foreground mb-4">
-          {filteredProducts.length} items available near you
-        </p>
+        <div className="flex items-center gap-3 mb-4">
+          <p className="text-sm text-muted-foreground">
+            {filteredProducts.length} items available near you
+          </p>
+          {scrapingStores && (
+            <span className="flex items-center gap-1.5 text-xs text-secondary">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Fetching live inventory...
+            </span>
+          )}
+          {hasScrapedData && !scrapingStores && (
+            <span className="flex items-center gap-1.5 text-xs text-secondary">
+              <Sparkles className="w-3 h-3" />
+              Live products
+            </span>
+          )}
+        </div>
 
         {/* Product Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">

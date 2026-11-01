@@ -1,73 +1,77 @@
-# Welcome to your Lovable project
+# Style In Store
 
-## Project info
+A location-aware store discovery and shopping-browse experience. The site introduces the service, explains how it works for shoppers and stores, and provides a dedicated browse route for exploring nearby stores and product listings.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Current experience
 
-## How can I edit this code?
+- **Home (`/`)** — introduction, how-it-works section, store-focused information, feature overview and call to action.
+- **Browse (`/browse`)** — location selection/current-location flow, nearby-store discovery, search/filter controls and product browsing.
+- **Store discovery** — location helpers are in `src/lib/locationService`.
+- **Product data integration** — store-product scraping is isolated under `src/lib/api/scrapeStore`.
+- **UI feedback** — toast notifications, reusable Radix/shadcn components and responsive layouts.
 
-There are several ways of editing your application.
+Product templates are present in the browse implementation. Do not interpret a template listing, displayed price or stock state as verified live inventory unless the connected store source confirms it.
 
-**Use Lovable**
+## Tech stack
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- React 18, TypeScript and Vite
+- React Router
+- Tailwind CSS and shadcn/ui (Radix UI)
+- TanStack Query
+- Supabase client
+- Leaflet / React Leaflet for map-related UI
+- Vitest and Testing Library
 
-Changes made via Lovable will be committed automatically to this repo.
+## Getting started
 
-**Use your preferred IDE**
+Requires Node.js and npm.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+git clone https://github.com/Lunatic5202/style-in-store.git
+cd style-in-store
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Vite prints the local development URL in the terminal.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Available scripts
 
-**Use GitHub Codespaces**
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the Vite development server |
+| `npm run build` | Create a production build |
+| `npm run build:dev` | Build using development mode |
+| `npm run preview` | Preview the production build |
+| `npm run lint` | Run ESLint |
+| `npm test` | Run the Vitest suite |
+| `npm run test:watch` | Run Vitest in watch mode |
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Project structure
 
-## What technologies are used for this project?
+```text
+src/
+├── components/       Shared page sections and UI components
+├── hooks/            Reusable React hooks
+├── lib/              Location and store/product integrations
+├── pages/            Home, Browse and not-found routes
+└── App.tsx           Providers and route definitions
+public/               Static assets
+supabase/             Supabase project resources
+```
 
-This project is built with:
+## Configuration and data
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Review the Supabase and location-service integration before deploying. Configure required public client settings through the environment mechanism used by the application; never commit service-role keys, private API credentials or real customer data.
 
-## How can I deploy this project?
+## Quality checks
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Before opening a pull request, run:
 
-## Can I connect a custom domain to my Lovable project?
+```bash
+npm run lint
+npm test
+npm run build
+```
 
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Document any external store API, scraping, geolocation or inventory limitations alongside changes that affect those flows.

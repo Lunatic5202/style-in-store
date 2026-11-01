@@ -71,3 +71,7 @@ npm run build
 ```
 
 Document external store API, scraping, geolocation and inventory limitations alongside changes to those flows.
+
+## License
+
+Original source code and project documentation are licensed under the [MIT License](LICENSE). Third-party libraries, datasets, fonts, media, and other separately licensed materials are excluded and remain under their respective terms.
